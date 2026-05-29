@@ -22,10 +22,17 @@ public struct OPML: Codable, Equatable {
         public let attributes: [Attribute]?
         public let children: [Outline]?
         public var siteURL: URL? {
-            URL(string: attributes?.first(where: { $0.name == "htmlUrl" })?.value ?? "")
+            urlValue(forAttributeNamed: "htmlUrl")
         }
         public var feedURL: URL? {
-            URL(string: attributes?.first(where: { $0.name == "xmlUrl" })?.value ?? "")
+            urlValue(forAttributeNamed: "xmlUrl")
+        }
+        private func urlValue(forAttributeNamed name: String) -> URL? {
+            guard let value = attributes?.first(where: { $0.name == name })?.value.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !value.isEmpty else {
+                return nil
+            }
+            return URL(string: value)
         }
         public init(text: String, title: String? = nil, attributes: [Attribute]? = nil, children: [Outline]? = nil) {
             self.text = text

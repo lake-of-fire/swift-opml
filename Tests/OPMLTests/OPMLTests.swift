@@ -208,6 +208,20 @@ import Foundation
     #expect(parsedOPML.outlines.first?.text == "Feed with \"quotes\" & ampersands")
 }
 
+@Test func testMissingURLAttributesProduceNilURLs() async throws {
+    let outline = OPML.Outline(
+        text: "Folder",
+        attributes: [
+            .init(name: "xmlUrl", value: " "),
+            .init(name: "htmlUrl", value: "")
+        ],
+        children: []
+    )
+
+    #expect(outline.feedURL == nil)
+    #expect(outline.siteURL == nil)
+}
+
 enum TestError: Error {
     case resourceNotFound(String)
     case conversionFailed
