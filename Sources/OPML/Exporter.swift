@@ -69,7 +69,9 @@ public extension OPML {
         xml += " text=\"\(xmlEscaped(outline.text))\""
         
         // Add title attribute if different from text
-        xml += " title=\"\(xmlEscaped(outline.title))\""
+        if let title = outline.title {
+            xml += " title=\"\(xmlEscaped(title))\""
+        }
         
         // Add other attributes
         if let attributes = outline.attributes {

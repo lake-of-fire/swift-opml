@@ -18,7 +18,7 @@ public struct OPML: Codable, Equatable {
     public struct Outline: Codable, Equatable {
         /// Some text describing the feed
         public let text: String
-        public let title: String
+        public let title: String?
         public let attributes: [Attribute]?
         public let children: [Outline]?
         public var siteURL: URL? {
@@ -27,7 +27,7 @@ public struct OPML: Codable, Equatable {
         public var feedURL: URL? {
             URL(string: attributes?.first(where: { $0.name == "xmlUrl" })?.value ?? "")
         }
-        public init(text: String, title: String, attributes: [Attribute]? = nil, children: [Outline]? = nil) {
+        public init(text: String, title: String? = nil, attributes: [Attribute]? = nil, children: [Outline]? = nil) {
             self.text = text
             self.title = title
             self.attributes = attributes
@@ -76,5 +76,43 @@ public struct OPML: Codable, Equatable {
         self.docs = docs
         self.outlines = outlines
     }
+
+    public init(_ data: Data) throws {
+        self = try OPMLParser.parse(data: data)
+    }
+
+    public init(file url: URL) throws {
+        self = try OPMLParser.parse(contentsOf: url)
+    }
+
+    public init(
+        version: String = "2.0",
+        title: String? = nil,
+        dateCreated: Date? = Date(),
+        dateModified: Date? = nil,
+        ownerName: String? = nil,
+        ownerEmail: String? = nil,
+        ownerID: URL? = nil,
+        docs: URL? = URL(string: "https://opml.org/spec2.opml"),
+        entries: [Outline]
+    ) {
+        self.init(
+            version: version,
+            title: title,
+            dateCreated: dateCreated,
+            dateModified: dateModified,
+            ownerName: ownerName,
+            ownerEmail: ownerEmail,
+            ownerID: ownerID,
+            docs: docs,
+            outlines: entries
+        )
+    }
+
+    public var entries: [Outline] {
+        outlines
+    }
 }
 
+public typealias Attribute = OPML.Attribute
+public typealias OPMLEntry = OPML.Outline
