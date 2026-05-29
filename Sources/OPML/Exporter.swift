@@ -9,6 +9,11 @@ import Foundation
 
 public extension OPML {
     // MARK: - XML Export
+
+    /// Compatibility alias for older OPML package versions.
+    var xml: String {
+        toXMLString()
+    }
     
     /// Converts the OPML object to XML string representation
     /// - Returns: A formatted XML string representing the OPML document
@@ -18,7 +23,7 @@ public extension OPML {
         xml += "  <head>\n"
         // Add head elements
         if let title = title {
-            xml += "    <title>\(xmlEscaped(title))</title>\n"
+            xml += "    <title>\(Self.xmlEscaped(title))</title>\n"
         }
         
         if let dateCreated = dateCreated {
@@ -30,25 +35,25 @@ public extension OPML {
         }
         
         if let ownerName = ownerName {
-            xml += "    <ownerName>\(xmlEscaped(ownerName))</ownerName>\n"
+            xml += "    <ownerName>\(Self.xmlEscaped(ownerName))</ownerName>\n"
         }
         
         if let ownerEmail = ownerEmail {
-            xml += "    <ownerEmail>\(xmlEscaped(ownerEmail))</ownerEmail>\n"
+            xml += "    <ownerEmail>\(Self.xmlEscaped(ownerEmail))</ownerEmail>\n"
         }
         
         if let ownerID = ownerID {
-            xml += "    <ownerId>\(xmlEscaped(ownerID.absoluteString))</ownerId>\n"
+            xml += "    <ownerId>\(Self.xmlEscaped(ownerID.absoluteString))</ownerId>\n"
         }
         
         if let docs = docs {
-            xml += "    <docs>\(xmlEscaped(docs.absoluteString))</docs>\n"
+            xml += "    <docs>\(Self.xmlEscaped(docs.absoluteString))</docs>\n"
         }
         xml += "  </head>\n"
         xml += "  <body>\n"
         // Add outlines
         for outline in outlines {
-            xml += outlineToXML(outline, indentLevel: 2)
+            xml += Self.outlineToXML(outline, indentLevel: 2)
         }
         xml += "  </body>\n"
         xml += "</opml>\n"
@@ -61,7 +66,7 @@ public extension OPML {
     ///   - outline: The outline to convert
     ///   - indentLevel: The current indentation level
     /// - Returns: XML string representation of the outline
-    private func outlineToXML(_ outline: Outline, indentLevel: Int) -> String {
+    fileprivate static func outlineToXML(_ outline: Outline, indentLevel: Int) -> String {
         let indent = String(repeating: " ", count: indentLevel)
         var xml = "\(indent)<outline"
         
@@ -100,7 +105,7 @@ public extension OPML {
     /// Escapes special XML characters in a string
     /// - Parameter string: The string to escape
     /// - Returns: The escaped string
-    private func xmlEscaped(_ string: String) -> String {
+    fileprivate static func xmlEscaped(_ string: String) -> String {
         return string
             .replacingOccurrences(of: "&", with: "&amp;")
             .replacingOccurrences(of: "<", with: "&lt;")
@@ -115,5 +120,12 @@ public extension OPML {
         formatter.dateFormat = "EEE, dd MMM yyyy HH:mm:ss Z"
         formatter.locale = Locale(identifier: "en_US_POSIX")
         return formatter
+    }
+}
+
+public extension OPML.Outline {
+    /// Compatibility alias for older OPML package versions.
+    var xml: String {
+        OPML.outlineToXML(self, indentLevel: 0)
     }
 }
