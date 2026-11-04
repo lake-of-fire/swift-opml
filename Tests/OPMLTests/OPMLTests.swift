@@ -222,6 +222,134 @@ import Foundation
     #expect(outline.siteURL == nil)
 }
 
+@Test func testSameTitleTopLevelOutlinesKeepDistinctTrees() throws {
+    let firstID = "11111111-1111-1111-1111-111111111111"
+    let secondID = "22222222-2222-2222-2222-222222222222"
+    let firstDirectoryID = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+    let secondDirectoryID = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+    let opml = OPML(entries: [
+        OPMLEntry(text: "Same", title: "Same", attributes: [
+            Attribute(name: "uuid", value: firstID)
+        ], children: [
+            OPMLEntry(text: "Nested", attributes: [
+                Attribute(name: "uuid", value: firstDirectoryID)
+            ], children: [
+                OPMLEntry(text: "First feed", attributes: [
+                    Attribute(name: "xmlUrl", value: "https://example.com/first.xml")
+                ])
+            ]),
+            OPMLEntry(text: "First sibling", attributes: [
+                Attribute(name: "xmlUrl", value: "https://example.com/first-sibling.xml")
+            ])
+        ]),
+        OPMLEntry(text: "Same", title: "Same", attributes: [
+            Attribute(name: "uuid", value: secondID)
+        ], children: [
+            OPMLEntry(text: "Nested", attributes: [
+                Attribute(name: "uuid", value: secondDirectoryID)
+            ], children: [
+                OPMLEntry(text: "Second feed", attributes: [
+                    Attribute(name: "xmlUrl", value: "https://example.com/second.xml")
+                ]),
+                OPMLEntry(text: "Second sibling", attributes: [
+                    Attribute(name: "xmlUrl", value: "https://example.com/second-sibling.xml")
+                ])
+            ])
+        ])
+    ])
+
+    let parsed = try OPML(Data(opml.xml.utf8))
+    #expect(parsed.entries.count == 2)
+    #expect(parsed.entries.compactMap { outlineAttribute("uuid", in: $0) } == [firstID, secondID])
+    let first = try #require(parsed.entries.first)
+    let second = try #require(parsed.entries.dropFirst().first)
+    #expect(first.children?.map(\.text) == ["Nested", "First sibling"])
+    #expect(second.children?.map(\.text) == ["Nested"])
+    let firstDirectory = try #require(first.children?.first)
+    let secondDirectory = try #require(second.children?.first)
+    #expect(outlineAttribute("uuid", in: firstDirectory) == firstDirectoryID)
+    #expect(outlineAttribute("uuid", in: secondDirectory) == secondDirectoryID)
+    #expect(firstDirectory.children?.compactMap { $0.feedURL?.absoluteString } == [
+        "https://example.com/first.xml"
+    ])
+    #expect(first.children?.last?.feedURL?.absoluteString == "https://example.com/first-sibling.xml")
+    #expect(secondDirectory.children?.compactMap { $0.feedURL?.absoluteString } == [
+        "https://example.com/second.xml",
+        "https://example.com/second-sibling.xml"
+    ])
+}
+
+@Test func testSameTitleEmptyAndNonemptyRootsKeepTheirPositions() throws {
+    let emptyID = "11111111-1111-1111-1111-111111111111"
+    let parentID = "22222222-2222-2222-2222-222222222222"
+    let empty = OPMLEntry(text: "Same", attributes: [
+        Attribute(name: "uuid", value: emptyID)
+    ])
+    let parent = OPMLEntry(text: "Same", attributes: [
+        Attribute(name: "uuid", value: parentID)
+    ], children: [OPMLEntry(text: "Child")])
+
+    for emptyFirst in [true, false] {
+        let entries = emptyFirst ? [empty, parent] : [parent, empty]
+        let parsed = try OPMLParser.parse(data: Data(OPML(entries: entries).xml.utf8))
+        let expectedIDs = emptyFirst ? [emptyID, parentID] : [parentID, emptyID]
+        #expect(parsed.entries.compactMap { outlineAttribute("uuid", in: $0) } == expectedIDs)
+        let parsedEmpty = try #require(parsed.entries.first {
+            outlineAttribute("uuid", in: $0) == emptyID
+        })
+        let parsedParent = try #require(parsed.entries.first {
+            outlineAttribute("uuid", in: $0) == parentID
+        })
+        #expect(parsedEmpty.children == nil)
+        #expect(parsedParent.children?.map(\.text) == ["Child"])
+    }
+}
+
+@Test func testUserScriptsWrapperAndSameTitleCategoryRemainSeparate() throws {
+    let categoryID = "11111111-1111-1111-1111-111111111111"
+    let scriptID = "22222222-2222-2222-2222-222222222222"
+    let feedID = "33333333-3333-3333-3333-333333333333"
+    let opml = OPML(entries: [
+        OPMLEntry(text: "User Scripts", attributes: [
+            Attribute(name: "isUserScriptList", value: "true")
+        ], children: [
+            OPMLEntry(text: "Draft", attributes: [
+                Attribute(name: "uuid", value: scriptID),
+                Attribute(name: "script", value: "")
+            ])
+        ]),
+        OPMLEntry(text: "User Scripts", attributes: [
+            Attribute(name: "uuid", value: categoryID),
+            Attribute(name: "isFeedCategory", value: "true")
+        ], children: [
+            OPMLEntry(text: "Feed", attributes: [
+                Attribute(name: "uuid", value: feedID),
+                Attribute(name: "xmlUrl", value: "https://example.com/feed.xml")
+            ])
+        ])
+    ])
+
+    let parsed = try OPML(Data(opml.xml.utf8))
+    #expect(parsed.entries.count == 2)
+    let scripts = try #require(parsed.entries.first)
+    let category = try #require(parsed.entries.dropFirst().first)
+    #expect(outlineAttribute("isUserScriptList", in: scripts) == "true")
+    #expect(scripts.children?.count == 1)
+    let script = try #require(scripts.children?.first)
+    #expect(outlineAttribute("uuid", in: script) == scriptID)
+    #expect(outlineAttribute("script", in: script) == "")
+    #expect(outlineAttribute("uuid", in: category) == categoryID)
+    #expect(outlineAttribute("isFeedCategory", in: category) == "true")
+    #expect(category.children?.count == 1)
+    let feed = try #require(category.children?.first)
+    #expect(outlineAttribute("uuid", in: feed) == feedID)
+    #expect(feed.feedURL?.absoluteString == "https://example.com/feed.xml")
+}
+
+private func outlineAttribute(_ name: String, in outline: OPML.Outline) -> String? {
+    outline.attributes?.first(where: { $0.name == name })?.value
+}
+
 enum TestError: Error {
     case resourceNotFound(String)
     case conversionFailed

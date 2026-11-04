@@ -172,11 +172,10 @@ public class OPMLParser: NSObject, XMLParserDelegate {
                 // Replace the parent in the stack
                 outlineStack[outlineStack.count - 1] = updatedParent
                 
-                // Also update in the top-level outlines if this is a top-level parent
+                // The live top-level parent is the last root appended when it opened.
+                // Display labels can be shared by different outlines.
                 if outlineStack.count == 1 {
-                    if let index = outlines.firstIndex(where: { $0.text == parentOutline.text && $0.title == parentOutline.title }) {
-                        outlines[index] = updatedParent
-                    }
+                    outlines[outlines.count - 1] = updatedParent
                 }
             } else {
                 // Top-level outline - just remove from stack
