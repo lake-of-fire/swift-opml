@@ -9,13 +9,19 @@ import Foundation
 
 
 public class OPMLParser: NSObject, XMLParserDelegate {
+    private struct Element {
+        let name: String
+        let defaultNamespace: String
+    }
+
     private let xmlParser: XMLParser
     private var parsedOPML: OPML?
+    private var elements: [Element] = []
+    private var hasBody = false
+    private var hasInvalidStructure = false
     
     // Parsing state
-    private var currentElement: String = ""
     private var currentCharacters: String = ""
-    private var currentOutline: OPML.Outline?
     private var outlineStack: [OPML.Outline] = []
     
     // Header information
@@ -51,7 +57,11 @@ public class OPMLParser: NSObject, XMLParserDelegate {
     }
     
     public func parse() throws -> OPML {
-        guard xmlParser.parse() else {
+        let didParse = xmlParser.parse()
+        guard !hasInvalidStructure else {
+            throw Error.invalidDocument
+        }
+        guard didParse else {
             if let error = xmlParser.parserError {
                 throw Error.parseError(error)
             } else {
@@ -59,7 +69,7 @@ public class OPMLParser: NSObject, XMLParserDelegate {
             }
         }
         
-        guard let parsedOPML = parsedOPML else {
+        guard hasBody, let parsedOPML = parsedOPML else {
             throw Error.invalidDocument
         }
         return parsedOPML
@@ -80,13 +90,24 @@ public class OPMLParser: NSObject, XMLParserDelegate {
     // MARK: - XMLParserDelegate
     
     public func parser(_ parser: XMLParser, didStartElement elementName: String, namespaceURI: String?, qualifiedName qName: String?, attributes attributeDict: [String : String] = [:]) {
-        currentElement = elementName
+        // Keep XMLParser's qualified attribute names for OPML extensions.
+        // In this mode it also supplies the default namespace declaration as an attribute.
+        let defaultNamespace = attributeDict["xmlns"] ?? elements.last?.defaultNamespace ?? ""
+        let name = defaultNamespace.isEmpty ? elementName : ""
+        guard !hasInvalidStructure, canOpenElement(named: name) else {
+            hasInvalidStructure = true
+            parser.abortParsing()
+            return
+        }
+        elements.append(Element(name: name, defaultNamespace: defaultNamespace))
         currentCharacters = ""
         
-        switch elementName {
+        switch name {
         case "opml":
             // Extract version from opml element
             version = attributeDict["version"] ?? "2.0"
+        case "body":
+            hasBody = true
         case "outline":
             let text = attributeDict["text"] ?? ""
             let title = attributeDict["title"] ?? attributeDict["text"] ?? ""
@@ -100,10 +121,7 @@ public class OPMLParser: NSObject, XMLParserDelegate {
                 children: nil
             )
             
-            if !outlineStack.isEmpty {
-                // Add to parent's children (will be handled when we pop the stack)
-                currentOutline = outline
-            } else {
+            if outlineStack.isEmpty {
                 // Top-level outline
                 outlines.append(outline)
             }
@@ -113,15 +131,30 @@ public class OPMLParser: NSObject, XMLParserDelegate {
             break
         }
     }
+
+    private func canOpenElement(named name: String) -> Bool {
+        guard let parent = elements.last else { return name == "opml" }
+        switch name {
+        case "opml":
+            return false
+        case "body":
+            return parent.name == "opml" && !hasBody
+        case "outline":
+            return parent.name == "body" || parent.name == "outline"
+        default:
+            return true
+        }
+    }
     
     public func parser(_ parser: XMLParser, foundCharacters string: String) {
         currentCharacters += string
     }
     
     public func parser(_ parser: XMLParser, didEndElement elementName: String, namespaceURI: String?, qualifiedName qName: String?) {
+        guard !hasInvalidStructure, let element = elements.popLast() else { return }
         defer { currentCharacters = "" }
         
-        switch elementName {
+        switch element.name {
         case "opml":
             // Create the final OPML object
             parsedOPML = OPML(
