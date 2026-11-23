@@ -83,6 +83,68 @@ import Foundation
     #expect(feed.siteURL?.absoluteString == "https://example.com")
 }
 
+@Test(arguments: [
+    "<rss/>",
+    "<response><opml><body/></opml></response>",
+    "<opml/>",
+    "<opml><head/></opml>",
+    "<opml><head><body/></head></opml>",
+    "<opml><body/><body/></opml>",
+    "<opml><body/><opml><body/></opml></opml>",
+    "<opml><head><outline text=\"Outside the body\"/></head><body/></opml>",
+    "<opml><body><wrapper><outline text=\"Outside the hierarchy\"/></wrapper></body></opml>",
+    "<opml xmlns=\"urn:other\"><body/></opml>",
+    "<other:opml xmlns:other=\"urn:other\"><body/></other:opml>",
+    "<opml xmlns:other=\"urn:other\"><other:body/></opml>",
+])
+func testOPMLRejectsInvalidDocumentStructure(_ xml: String) throws {
+    do {
+        _ = try OPMLParser.parse(data: Data(xml.utf8))
+        Issue.record("Expected an invalid OPML document")
+    } catch OPMLParser.Error.invalidDocument {
+        // The XML is well-formed, but it does not describe an OPML document.
+    }
+}
+
+@Test func testOPMLAcceptsExplicitEmptyBody() throws {
+    let exported = OPML(title: "Empty subscriptions").toXMLString()
+    let parsed = try OPML(Data(exported.utf8))
+    #expect(parsed.title == "Empty subscriptions")
+    #expect(parsed.outlines.isEmpty)
+
+    let withoutHead = try OPML(Data("<opml><body/></opml>".utf8))
+    #expect(withoutHead.title == nil)
+    #expect(withoutHead.outlines.isEmpty)
+}
+
+@Test func testOPMLDocumentStructurePreservesOriginalEncodingAndExtensions() throws {
+    let xml = """
+    <?xml version="1.0" encoding="UTF-16"?>
+    <opml version="2.0" xmlns:vendor="urn:vendor">
+      <head><title>  購読一覧  </title><vendor:settings/></head>
+      <body>
+        <vendor:outline text="Not an OPML outline"/>
+        <extension xmlns="urn:vendor"><outline text="Not an OPML outline either"/></extension>
+        <outline text="Folder" vendor:color="blue">
+          <outline text="記事" xmlUrl="https://example.com/first.xml"/>
+        </outline>
+        <outline text="Folder">
+          <outline text="ニュース" xmlUrl="https://example.com/second.xml"/>
+        </outline>
+      </body>
+    </opml>
+    """
+    let data = try #require(xml.data(using: .utf16))
+    let parsed = try OPMLParser.parse(data: data)
+    #expect(parsed.title == "購読一覧")
+    #expect(parsed.outlines.map(\.text) == ["Folder", "Folder"])
+    let first = try #require(parsed.outlines.first)
+    let second = try #require(parsed.outlines.last)
+    #expect(first.attributes?.contains(.init(name: "vendor:color", value: "blue")) == true)
+    #expect(first.children?.first?.text == "記事")
+    #expect(second.children?.first?.text == "ニュース")
+}
+
 @Test func testOPMLToXML() async throws {
     let opml = OPML(
         title: "Feedly",
